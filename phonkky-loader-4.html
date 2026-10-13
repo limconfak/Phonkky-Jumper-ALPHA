@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Phonkky Jumper — Загрузка</title>
+<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#f4f1e8; --ink:#141414; --red:#e63424; --pencil:#8a8578; --water:#2f8fd6; }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; padding:0; height:100%; background:var(--paper); font-family:'Patrick Hand',sans-serif; overflow:hidden; }
+  #shell{ position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+  h1{ font-family:'Permanent Marker',cursive; font-size:clamp(30px,9vw,46px); color:var(--ink); margin:0 0 4px 0; transform:rotate(-2deg); }
+  .sub{ color:var(--pencil); font-size:15px; margin:0 0 22px 0; max-width:300px; }
+
+  #phoneDoodle{ width:70px; height:100px; margin-bottom:18px; position:relative; }
+  #phoneDoodle svg{ width:100%; height:100%; }
+  .blink{ animation: blink 2.6s ease-in-out infinite; }
+  @keyframes blink{ 0%,92%,100%{ transform:scaleY(1); } 95%{ transform:scaleY(0.15); } }
+
+  #barOuter{
+    width:min(78vw,280px); height:20px; border:3px solid var(--ink); border-radius:11px;
+    background:#fff; overflow:hidden; box-shadow:3px 3px 0 rgba(0,0,0,0.15); position:relative;
+  }
+  #barInner{ height:100%; width:0%; background:linear-gradient(90deg,#e63424,#ff7a45); transition:width .25s ease; }
+  #barPct{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:11px; color:var(--ink); font-weight:bold; text-shadow:0 0 3px #fff;
+  }
+  #status{ margin-top:12px; font-size:13px; color:var(--pencil); min-height:18px; }
+  #errBox{ display:none; margin-top:16px; max-width:300px; }
+  #errBox p{ color:var(--red); font-size:13px; margin:0 0 10px 0; }
+  button.doodle{
+    font-family:'Permanent Marker',cursive; font-size:16px; color:var(--ink); background:var(--paper);
+    border:3px solid var(--ink); border-radius:14px 12px 16px 10px / 12px 16px 10px 14px;
+    padding:9px 22px; cursor:pointer; box-shadow:3px 3px 0 var(--ink);
+  }
+  button.doodle:active{ transform:translate(3px,3px); box-shadow:0 0 0 var(--ink); }
+  #gameFrame{ display:none; position:fixed; inset:0; width:100%; height:100%; border:none; }
+  .version-note{ position:absolute; bottom:10px; font-size:10px; color:#00000055; }
+
+  .link-btn{
+    background:none; border:none; color:var(--water); font-family:'Patrick Hand',sans-serif;
+    font-size:12px; text-decoration:underline; cursor:pointer; margin-top:14px; padding:4px;
+  }
+
+  /* Small tab docked to the top-right corner, always on top of the
+     loading screen AND the game itself once it's showing in the
+     iframe — the only way to reach the version picker after the
+     game has already loaded. Sits mostly tucked away by default and
+     nudges out a little on tap/hover as a hint that it's there. */
+  #versionTab{
+    position:fixed; top:0; right:0; z-index:200;
+    width:30px; height:30px;
+    background:var(--ink); color:var(--paper);
+    border:none; border-bottom-left-radius:16px;
+    font-size:16px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0.4; transform:translate(6px,-6px);
+    transition:opacity .2s ease, transform .2s ease;
+  }
+  #versionTab:hover, #versionTab:active, #versionTab.nudge{
+    opacity:0.95; transform:translate(0,0);
+  }
+
+  #versionListOverlay{
+    position:fixed; inset:0; background:var(--paper); z-index:50; display:flex; flex-direction:column;
+    align-items:center; padding:26px 20px; overflow-y:auto;
+  }
+  #versionListOverlay.hidden{ display:none; }
+  #versionListOverlay h2{ font-family:'Permanent Marker',cursive; font-size:24px; color:var(--ink); margin:0 0 6px 0; }
+  #versionListItems{ width:100%; max-width:320px; display:flex; flex-direction:column; gap:8px; }
+  .version-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    border:2.5px solid var(--ink); border-radius:9px; padding:10px 14px; background:#fff;
+    cursor:pointer; box-shadow:2px 2px 0 rgba(0,0,0,0.15);
+  }
+  .version-item:active{ transform:translate(2px,2px); box-shadow:0 0 0 rgba(0,0,0,0.15); }
+  .version-item .v-label{ font-family:'Permanent Marker',cursive; font-size:15px; color:var(--ink); }
+  .version-item .v-tag{ font-size:11px; color:var(--pencil); }
+  .version-item.is-active{ border-color:var(--water); background:#eaf5fc; }
+  .version-item.is-latest .v-tag{ color:var(--water); }
+  .version-item.is-downloaded .v-tag::after{ content:' · сохранена offline'; }
+
+  #authGate{
+    position:fixed; inset:0; background:var(--paper); z-index:60; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:26px 22px; text-align:center;
+  }
+  #authGate.hidden{ display:none; }
+  #authGate h1{ font-family:'Permanent Marker',cursive; font-size:clamp(26px,8vw,38px); color:var(--ink); margin:0 0 6px 0; transform:rotate(-2deg); }
+  #authGate .sub{ margin-bottom:16px; }
+  #authGate input{
+    width:90%; max-width:300px; font-size:14px; padding:9px; border:2px solid var(--ink);
+    border-radius:8px; margin-bottom:9px; font-family:'Patrick Hand',sans-serif;
+  }
+  #authGateNote{ font-size:12px; color:var(--water); min-height:16px; margin-top:8px; max-width:300px; }
+  #authGateNote.err{ color:var(--red); }
+</style>
+</head>
+<body>
+
+<div id="authGate">
+  <h1>Phonkky Jumper</h1>
+  <p class="sub" id="authGateText">Придумай логин и пароль — они запомнятся на этом устройстве.</p>
+  <input type="text" id="authLoginInput" placeholder="Логин" autocomplete="off" spellcheck="false">
+  <input type="password" id="authPasswordInput" placeholder="Пароль" autocomplete="off" spellcheck="false">
+  <button class="doodle" id="authGateSubmit">Войти</button>
+  <p id="authGateNote"></p>
+</div>
+
+<div id="shell">
+  <div id="phoneDoodle">
+    <svg viewBox="0 0 120 170" fill="none">
+      <path d="M20 8 L95 4 L100 160 L15 164 Z" stroke="#141414" stroke-width="6" stroke-linejoin="round" fill="#fff"/>
+      <g class="blink">
+        <line x1="42" y1="60" x2="42" y2="90" stroke="#141414" stroke-width="7" stroke-linecap="round"/>
+        <line x1="74" y1="58" x2="74" y2="88" stroke="#141414" stroke-width="7" stroke-linecap="round"/>
+      </g>
+      <path d="M38 108 Q58 128 84 104" stroke="#141414" stroke-width="6" stroke-linecap="round" fill="none"/>
+      <rect x="30" y="132" width="16" height="10" rx="3" stroke="#141414" stroke-width="4" fill="#fff"/>
+      <rect x="52" y="132" width="16" height="10" rx="3" stroke="#141414" stroke-width="4" fill="#fff"/>
+      <rect x="74" y="132" width="16" height="10" rx="3" stroke="#141414" stroke-width="4" fill="#fff"/>
+    </svg>
+  </div>
+
+  <h1>Phonkky Jumper</h1>
+  <p class="sub">Проверяем обновления...</p>
+
+  <div id="barOuter"><div id="barInner"></div><div id="barPct">0%</div></div>
+  <div id="status">Подключение...</div>
+
+  <div id="errBox">
+    <p id="errText">Не удалось подключиться к серверу.</p>
+    <button class="doodle" id="btnRetry">Повторить</button>
+  </div>
+
+  <button id="btnPickVersion" class="link-btn">выбрать версию</button>
+  <div class="version-note" id="versionNote"></div>
+</div>
+
+<button id="versionTab" title="Выбрать версию">⋮</button>
+
+<div id="versionListOverlay" class="hidden">
+  <h2>Выбор версии</h2>
+  <p class="sub" style="margin-bottom:14px;">Можно вернуться на любую версию — новая скачается автоматически, старая возьмётся из памяти телефона, если уже загружалась раньше.</p>
+  <div id="versionListItems"></div>
+  <button class="doodle" id="btnVersionListClose" style="margin-top:16px;">Закрыть</button>
+</div>
+
+<iframe id="gameFrame" title="Phonkky Jumper"></iframe>
+
+<script>
+(function(){
+"use strict";
+
+/* =====================================================================
+   CONFIGURE THESE TWO LINES — this is the only setup this file needs.
+
+   VERSION_URL must point to a small JSON file YOU host, shaped like:
+     { "version": "3", "url": "https://your-host.com/phonkky-runner.html" }
+
+   Bump "version" (any string/number, just has to change) and point
+   "url" at the new build every time you want players to receive an
+   update WITHOUT rebuilding or resubmitting the APK — this loader
+   detects the change on next launch and re-downloads automatically.
+===================================================================== */
+const VERSION_URL = "https://raw.githubusercontent.com/limconfak/Phonkky-Jumper/main/phonkky-version.json";
+const REQUEST_TIMEOUT_MS = 15000;
+
+/* ===================================================================== */
+
+const CACHE_NAME = 'phonkky-jumper-cache-v1';
+function cacheKeyFor(version){ return 'game-html-v' + version; }
+const LS_PINNED_VERSION = 'phonkky_pinned_version'; // set only when the player manually picks a specific version
+
+/* IndexedDB is used instead of the Cache Storage API for the actual game
+   payload: Cache Storage is unreliable under a file:// origin in some
+   Android WebView / Cordova setups, while IndexedDB works consistently
+   there. localStorage is avoided for the payload itself since it's
+   typically capped around 5-10MB and this file is larger than that. */
+const DB_NAME = 'phonkky_loader_db';
+const STORE_NAME = 'files';
+
+function idbOpen(){
+  return new Promise((resolve, reject)=>{
+    if(!('indexedDB' in window)){ reject(new Error('no indexeddb')); return; }
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = ()=>{ req.result.createObjectStore(STORE_NAME); };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+async function idbGet(key){
+  try{
+    const db = await idbOpen();
+    return await new Promise((resolve,reject)=>{
+      const tx = db.transaction(STORE_NAME,'readonly');
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = ()=> resolve(req.result || null);
+      req.onerror = ()=> reject(req.error);
+    });
+  }catch(e){ return null; }
+}
+async function idbSet(key, value){
+  try{
+    const db = await idbOpen();
+    return await new Promise((resolve,reject)=>{
+      const tx = db.transaction(STORE_NAME,'readwrite');
+      tx.objectStore(STORE_NAME).put(value, key);
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> reject(tx.error);
+    });
+  }catch(e){ return false; }
+}
+
+const els = {
+  status: document.getElementById('status'),
+  barInner: document.getElementById('barInner'),
+  barPct: document.getElementById('barPct'),
+  errBox: document.getElementById('errBox'),
+  errText: document.getElementById('errText'),
+  shell: document.getElementById('shell'),
+  frame: document.getElementById('gameFrame'),
+  versionNote: document.getElementById('versionNote'),
+  retry: document.getElementById('btnRetry')
+};
+
+function setStatus(msg){ els.status.textContent = msg; }
+function setProgress(pct){
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  els.barInner.style.width = p+'%';
+  els.barPct.textContent = p+'%';
+}
+function showError(msg){
+  setStatus('');
+  els.errText.textContent = msg;
+  els.errBox.style.display = 'block';
+}
+function hideError(){ els.errBox.style.display = 'none'; }
+
+function timeoutFetch(url, ms){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), ms);
+  return fetch(url, {signal: ctrl.signal, cache:'no-store'}).finally(()=>clearTimeout(t));
+}
+
+async function getCachedHtml(version){
+  return await idbGet(cacheKeyFor(version));
+}
+async function setCachedHtml(version, html){
+  await idbSet(cacheKeyFor(version), html);
+}
+
+function renderGame(html, note){
+  els.shell.style.display = 'none';
+  els.frame.style.display = 'block';
+  els.frame.srcdoc = html;
+  if(note) els.versionNote.textContent = note;
+  nudgeVersionTab();
+}
+
+function nudgeVersionTab(){
+  // briefly pokes the corner tab out so first-time players notice it exists,
+  // then lets it settle back to its mostly-hidden resting state
+  const tab = document.getElementById('versionTab');
+  tab.classList.add('nudge');
+  setTimeout(()=>tab.classList.remove('nudge'), 1600);
+}
+
+/* =====================================================================
+   DECRYPTION (AES-256-GCM via the browser's native Web Crypto API)
+
+   The downloaded file is not plain HTML — it's base64 text containing
+   [12-byte IV][ciphertext][16-byte auth tag]. This decrypts it back
+   into the HTML string before it's cached/rendered.
+
+   DECRYPTION_KEY_B64 must be the exact key that was used to encrypt
+   phonkky-runner-4.enc. Paste the key you generated below.
+===================================================================== */
+const DECRYPTION_KEY_B64 = "NbeP+ISyzGpZdZxJqMpY5wO3UlaC7HTn1u02/yyBkiQ=";
+
+let cryptoKeyPromise = null;
+function getDecryptionKey(){
+  if(!cryptoKeyPromise){
+    const raw = Uint8Array.from(atob(DECRYPTION_KEY_B64), c=>c.charCodeAt(0));
+    cryptoKeyPromise = crypto.subtle.importKey('raw', raw, {name:'AES-GCM'}, false, ['decrypt']);
+  }
+  return cryptoKeyPromise;
+}
+async function decryptGamePayload(base64Text){
+  const combined = Uint8Array.from(atob(base64Text), c=>c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const data = combined.slice(12);
+  const key = await getDecryptionKey();
+  const plainBuf = await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, data);
+  return new TextDecoder('utf-8').decode(plainBuf);
+}
+
+// Auto-detects plain HTML vs. encrypted "kasha" (base64 mush) by looking
+// at the start of the downloaded text — no manual flag in the JSON needed.
+function looksLikeHtml(text){
+  const head = text.slice(0, 300).trim().toLowerCase();
+  return head.startsWith('<!doctype') || head.startsWith('<html') || head.startsWith('<head') || head.startsWith('<script');
+}
+
+async function downloadWithProgress(url){
+  const res = await timeoutFetch(url, REQUEST_TIMEOUT_MS);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const total = parseInt(res.headers.get('Content-Length')||'0', 10);
+  let text;
+  if(!res.body || !total){
+    // server didn't give us a length or streaming isn't supported — fall back to a plain await
+    setStatus('Загрузка обновления...');
+    setProgress(60);
+    text = await res.text();
+  } else {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let received = 0;
+    text = '';
+    setStatus('Загрузка обновления...');
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      received += value.length;
+      text += decoder.decode(value, {stream:true});
+      setProgress((received/total)*90); // last 10% reserved in case decryption is needed
+    }
+    text += decoder.decode();
+  }
+
+  if(looksLikeHtml(text)){
+    setProgress(100);
+    return text; // plain HTML — e.g. an older build uploaded before encryption existed
+  }
+
+  // otherwise this is treated as encrypted "kasha" and gets decrypted automatically
+  setStatus('Расшифровка...');
+  try{
+    const html = await decryptGamePayload(text);
+    setProgress(100);
+    return html;
+  }catch(e){
+    throw new Error('decrypt-failed');
+  }
+}
+
+let currentManifest = null;
+
+/* manifest shape this loader expects:
+   {
+     "versions": [
+       { "version": "1", "label": "v1", "url": "https://.../old-build.html" },
+       { "version": "2", "label": "v2", "url": "https://.../phonkky-runner-4.enc" }
+     ]
+   }
+   Just add one new object to "versions" every time you ship a build —
+   that's the only edit needed. Old entries stay forever so players
+   can roll back to any of them from the "выбрать версию" screen.
+
+   No "latest" field needed either — the loader compares all the
+   "version" numbers in the list and treats the highest one as
+   current. (You CAN still add a "latest": "X" field at the top level
+   if you ever want to deliberately pin everyone to an older build
+   without deleting the newer ones from the list — if present, it
+   overrides the automatic comparison.)
+
+   No "encrypted" field needed — the loader looks at the downloaded
+   file itself and figures out on its own whether it's plain HTML or
+   encrypted "kasha", so an older plain .html build and a newer
+   encrypted .enc build can both sit in this same list untouched. */
+
+// Compares two version strings like "2", "1.4", "0.02.10" etc.
+// Splits on "." and compares each piece numerically, left to right.
+function compareVersions(a, b){
+  const pa = String(a).split('.').map(n=>parseInt(n,10)||0);
+  const pb = String(b).split('.').map(n=>parseInt(n,10)||0);
+  const len = Math.max(pa.length, pb.length);
+  for(let i=0;i<len;i++){
+    const na = pa[i]||0, nb = pb[i]||0;
+    if(na !== nb) return na - nb;
+  }
+  return 0;
+}
+
+// The newest version is whichever one in the list compares highest —
+// no need to keep a separate "latest" field in sync by hand. If the
+// manifest still has an explicit "latest", that's respected instead
+// (handy for deliberately pinning everyone to an older build, e.g.
+// after a bad release, without deleting anything from the list).
+function resolveLatestVersion(manifest){
+  if(manifest.latest) return String(manifest.latest);
+  const versions = manifest.versions || [];
+  if(versions.length === 0) return null;
+  return versions.reduce((best, v)=>
+    compareVersions(v.version, best) > 0 ? v.version : best
+  , versions[0].version);
+}
+
+function findVersionEntry(manifest, versionId){
+  return (manifest.versions||[]).find(v=>String(v.version)===String(versionId)) || null;
+}
+
+async function loadVersion(manifest, versionId, {isAutoUpdate}={}){
+  const entry = findVersionEntry(manifest, versionId);
+  if(!entry){ showError('Версия '+versionId+' не найдена в списке.'); return; }
+
+  const cached = await getCachedHtml(entry.version);
+  if(cached){
+    setStatus('Найдено локально: ' + (entry.label||('v'+entry.version)));
+    setProgress(100);
+    setTimeout(()=>renderGame(cached, entry.label||('v'+entry.version)), 300);
+    return;
+  }
+
+  try{
+    setStatus('Загружаем ' + (entry.label||('v'+entry.version)) + '...');
+    const html = await downloadWithProgress(entry.url);
+    await setCachedHtml(entry.version, html);
+    setStatus('Готово!');
+    setTimeout(()=>renderGame(html, entry.label||('v'+entry.version)), 300);
+  }catch(e){
+    const isDecryptError = e && e.message === 'decrypt-failed';
+    showError(isDecryptError
+      ? 'Не удалось расшифровать эту версию. Проверьте ключ в загрузчике.'
+      : 'Не удалось загрузить выбранную версию. Проверьте интернет-соединение и повторите попытку.');
+  }
+}
+
+async function boot(){
+  hideError();
+  setStatus('Проверка обновлений...');
+  setProgress(0);
+
+  let manifest = null;
+  let diagnosticMessage = null;
+  try{
+    let res;
+    try{
+      res = await timeoutFetch(VERSION_URL, REQUEST_TIMEOUT_MS);
+    }catch(networkErr){
+      console.error('Phonkky loader: failed to reach', VERSION_URL, networkErr);
+      diagnosticMessage = 'Не удалось подключиться к серверу обновлений. Проверьте интернет-соединение.';
+      throw networkErr;
+    }
+    if(!res.ok){
+      console.error('Phonkky loader: HTTP', res.status, 'from', VERSION_URL);
+      diagnosticMessage = 'Сервер обновлений ответил ошибкой (HTTP ' + res.status + ').';
+      throw new Error('HTTP '+res.status);
+    }
+    const rawText = await res.text();
+    try{
+      manifest = JSON.parse(rawText);
+    }catch(jsonErr){
+      console.error('Phonkky loader: version.json is not valid JSON', jsonErr, rawText);
+      diagnosticMessage = 'Файл обновлений повреждён (не читается как JSON).';
+      throw jsonErr;
+    }
+  }catch(e){
+    // fall back to whatever is cached locally, trying the pinned version
+    // first, then the last-known-latest — but only silently if we're
+    // truly offline; if the server responded with something broken,
+    // surface that clearly instead of just saying "no connection".
+    const pinned = localStorage.getItem(LS_PINNED_VERSION);
+    const lastKnownLatest = localStorage.getItem('phonkky_last_known_latest');
+    const tryOrder = [pinned, lastKnownLatest].filter(Boolean);
+    for(const v of tryOrder){
+      const cached = await getCachedHtml(v);
+      if(cached){
+        setStatus('Не удалось проверить обновления — используется сохранённая версия');
+        setTimeout(()=>renderGame(cached, 'офлайн-копия v'+v), 500);
+        return;
+      }
+    }
+    showError(diagnosticMessage || 'Нет соединения с сервером обновлений, а сохранённой копии игры ещё нет. Проверьте интернет и повторите попытку.');
+    return;
+  }
+
+  currentManifest = manifest;
+  const latestVersion = resolveLatestVersion(manifest);
+  localStorage.setItem('phonkky_last_known_latest', String(latestVersion));
+
+  const pinned = localStorage.getItem(LS_PINNED_VERSION);
+  const targetVersion = pinned || latestVersion;
+  await loadVersion(manifest, targetVersion, {isAutoUpdate: !pinned});
+}
+
+/* ---------------- version picker UI ---------------- */
+async function openVersionList(){
+  if(!currentManifest){
+    try{
+      const res = await timeoutFetch(VERSION_URL, REQUEST_TIMEOUT_MS);
+      currentManifest = await res.json();
+    }catch(e){
+      alert('Нет связи с сервером — список версий недоступен офлайн.');
+      return;
+    }
+  }
+  const pinned = localStorage.getItem(LS_PINNED_VERSION);
+  const latestVersion = resolveLatestVersion(currentManifest);
+  const activeVersion = pinned || latestVersion;
+  const container = document.getElementById('versionListItems');
+  container.innerHTML = '';
+
+  for(const entry of (currentManifest.versions||[]).slice().reverse()){
+    const isLatest = String(entry.version) === String(latestVersion);
+    const isActive = String(entry.version) === String(activeVersion);
+    const downloaded = await getCachedHtml(entry.version);
+    const row = document.createElement('div');
+    row.className = 'version-item'
+      + (isActive ? ' is-active' : '')
+      + (isLatest ? ' is-latest' : '')
+      + (downloaded ? ' is-downloaded' : '');
+    row.innerHTML = '<span class="v-label">'+(entry.label||('v'+entry.version))+'</span>'
+      + '<span class="v-tag">'+(isLatest?'последняя':'')+'</span>';
+    row.addEventListener('click', ()=>{
+      if(isLatest){
+        localStorage.removeItem(LS_PINNED_VERSION); // follow future updates again
+      } else {
+        localStorage.setItem(LS_PINNED_VERSION, String(entry.version));
+      }
+      document.getElementById('versionListOverlay').classList.add('hidden');
+      els.shell.style.display = 'flex';
+      els.frame.style.display = 'none';
+      boot();
+    });
+    container.appendChild(row);
+  }
+  document.getElementById('versionListOverlay').classList.remove('hidden');
+}
+document.getElementById('btnPickVersion').addEventListener('click', openVersionList);
+document.getElementById('versionTab').addEventListener('click', openVersionList);
+document.getElementById('btnVersionListClose').addEventListener('click', ()=>{
+  document.getElementById('versionListOverlay').classList.add('hidden');
+});
+
+els.retry.addEventListener('click', boot);
+
+
+/* =====================================================================
+   AUTH GATE — simple free local login. No payment, no VK, no SMS:
+   whatever login+password the player types in FIRST becomes their
+   saved account on this device; every time after that, they must
+   type the same login+password to get back in. This is just an
+   identity gate, not a security system — it's stored in localStorage
+   on the player's own device, so it protects against nothing beyond
+   "someone else picking up this phone and tapping play".
+===================================================================== */
+const LS_ACCOUNT_KEY = 'phonkky_loader_account';
+
+function getSavedAccount(){
+  try{
+    const raw = localStorage.getItem(LS_ACCOUNT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveAccount(login, password){
+  try{ localStorage.setItem(LS_ACCOUNT_KEY, JSON.stringify({ login, password })); }catch(e){}
+}
+
+function showAuthGate(){
+  const account = getSavedAccount();
+  const text = document.getElementById('authGateText');
+  text.textContent = account
+    ? 'Введи свой логин и пароль, чтобы продолжить.'
+    : 'Придумай логин и пароль — они запомнятся на этом устройстве.';
+  document.getElementById('authGate').classList.remove('hidden');
+}
+function hideAuthGateAndBoot(){
+  document.getElementById('authGate').classList.add('hidden');
+  boot();
+}
+
+document.getElementById('authGateSubmit').addEventListener('click', ()=>{
+  const login = document.getElementById('authLoginInput').value.trim();
+  const password = document.getElementById('authPasswordInput').value;
+  const note = document.getElementById('authGateNote');
+  note.classList.remove('err');
+
+  if(!login){ note.classList.add('err'); note.textContent = 'Введи логин'; return; }
+  if(!password){ note.classList.add('err'); note.textContent = 'Введи пароль'; return; }
+
+  const account = getSavedAccount();
+  if(!account){
+    saveAccount(login, password);
+    note.textContent = 'Аккаунт создан!';
+    setTimeout(hideAuthGateAndBoot, 350);
+    return;
+  }
+
+  if(account.login === login && account.password === password){
+    note.textContent = 'Вход выполнен!';
+    setTimeout(hideAuthGateAndBoot, 350);
+  } else {
+    note.classList.add('err');
+    note.textContent = 'Неверный логин или пароль.';
+  }
+});
+
+showAuthGate();
+
+})();
+</script>
+</body>
+</html>
